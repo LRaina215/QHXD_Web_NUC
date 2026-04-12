@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qhxd-nuc-state-uploader"
+version = "0.1.0"
+description = "Minimal NUC to RK3588 state uploader for Phase 2 integration."
+requires-python = ">=3.10"
+
+[tool.setuptools]
+packages = ["nuc_state_uploader"]

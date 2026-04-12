@@ -1,0 +1,44 @@
+{
+  "pose": {
+    "x": 12.3,
+    "y": 4.5,
+    "yaw": 1.2,
+    "frame_id": "map",
+    "timestamp": "2026-04-12T15:20:30Z"
+  },
+  "navigation": {
+    "mode": "auto",
+    "status": "running",
+    "goal_id": "wp-real-001",
+    "remaining_distance_m": 2.5
+  },
+  "task": {
+    "id": "task-real-001",
+    "type": "go_to_waypoint",
+    "status": "running",
+    "progress_percent": 35,
+    "source": "nuc"
+  },
+  "device": {
+    "battery_percent": 77,
+    "emergency_stop": false,
+    "fault_code": null,
+    "online": true
+  },
+  "environment": {
+    "temperature_c": null,
+    "humidity_percent": null,
+    "status": "offline"
+  },
+  "alerts": [
+    {
+      "id": "alert-real-001",
+      "severity": "warning",
+      "text": "前方通道临时拥堵，导航速度已降低。",
+      "source": "nuc-nav",
+      "time": "2026-04-12T15:20:30Z",
+      "ack": false
+    }
+  ],
+  "updated_at": "2026-04-12T15:20:30Z"
+}

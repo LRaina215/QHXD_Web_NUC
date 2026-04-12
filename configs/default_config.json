@@ -1,0 +1,19 @@
+{
+  "send_interval_sec": 1.0,
+  "log_level": "INFO",
+  "dump_payload": false,
+  "rk3588": {
+    "base_url": "http://127.0.0.1:8000",
+    "state_endpoint": "/api/internal/nuc/state",
+    "mode_switch_endpoint": "/api/system/mode/switch",
+    "timeout_sec": 2.0,
+    "retry_count": 1,
+    "retry_backoff_sec": 0.5
+  },
+  "collector": {
+    "type": "mock",
+    "state_file": "examples/internal_state.sample.json",
+    "frame_id": "map",
+    "source_name": "nuc"
+  }
+}
