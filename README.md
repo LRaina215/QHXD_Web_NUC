@@ -60,6 +60,11 @@ python3 -m nuc_state_uploader.main run --dry-run --print-payload
 
 按照 `NUC_DO.md` 中的要求，RK3588 只有在 `real` 模式下才会接受 NUC 状态。
 
+如果命令是在 NUC 上执行，`127.0.0.1` 指向的是 NUC 本机，不是 RK3588。
+这时必须把命令里的地址改成 NUC 实际可达的 RK3588 IP。
+
+如果你的 NUC 环境里设置了 `http_proxy/https_proxy/all_proxy`，建议联调时加上 `--noproxy '*'`，避免本地代理把局域网请求转走。
+
 用本项目命令切换：
 
 ```bash
@@ -69,7 +74,7 @@ python3 -m nuc_state_uploader.main --config configs/default_config.json switch-m
 或者直接用 curl：
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/system/mode/switch \
+curl --noproxy '*' -X POST http://<RK3588_IP>:8000/api/system/mode/switch \
   -H 'Content-Type: application/json' \
   -d '{"mode":"real","source":"integration-test","requested_by":"operator"}'
 ```
@@ -93,7 +98,7 @@ python3 -m nuc_state_uploader.main run
 检查 RK3588 最新状态：
 
 ```bash
-curl http://127.0.0.1:8000/api/state/latest
+curl --noproxy '*' http://<RK3588_IP>:8000/api/state/latest
 ```
 
 预期至少看到：
@@ -207,8 +212,8 @@ python3 -m nuc_state_uploader.main switch-mode --mode real
 
 优先检查：
 
-- RK3588 后端是否真的启动在 `http://127.0.0.1:8000`
-- `configs/default_config.json` 里的 `base_url` 是否写对
+- 如果你在 RK3588 本机测试，后端是否真的启动在 `http://127.0.0.1:8000`
+- 如果你在 NUC 上测试，`configs/default_config.json` 里的 `base_url` 是否写成了 NUC 实际可达的 RK3588 网口 IP
 - NUC 与 RK3588 是否同网段、网线是否接通
 - 防火墙或端口占用是否阻断了连接
 
@@ -216,7 +221,7 @@ python3 -m nuc_state_uploader.main switch-mode --mode real
 
 优先检查：
 
-- `curl http://127.0.0.1:8000/api/state/latest` 是否已经变化
+- 在 NUC 上执行 `curl --noproxy '*' http://<RK3588_IP>:8000/api/state/latest` 是否已经变化
 - RK3588 是否处于 `real` 模式
 - `task_status.source` 是否确实为 `nuc`
 - WebSocket 页面是否连接到了正确的 RK3588 服务
@@ -236,6 +241,7 @@ python3 -m nuc_state_uploader.main switch-mode --mode real
   - 发送周期，默认 `1.0`
 - `rk3588.base_url`
   - RK3588 后端地址
+  - 如果发送程序运行在 NUC 上，通常应改成 `http://<RK3588_IP>:8000`，而不是 `http://127.0.0.1:8000`
 - `rk3588.timeout_sec`
   - HTTP 超时，默认 `2.0`
 - `rk3588.retry_count`
@@ -253,8 +259,25 @@ python3 -m nuc_state_uploader.main switch-mode --mode real
 python3 -m unittest discover -s tests
 ```
 
+## 当前状态
+
+本项目已经完成一轮纯有线 Round3 联调验收。
+
+本轮实测结果见：
+
+- [ROUND3验收.md](/home/robomaster/QHXD_NUC/ROUND3验收.md#L1)
+
+当前确认：
+
+- RK3588 有线地址：`192.168.10.2`
+- NUC 有线网口 `enp89s0` 保留激光雷达地址 `192.168.1.50/24`
+- 为 RK3588 联调额外挂第二地址：`192.168.10.3/24`
+- `POST /api/internal/nuc/state`、`GET /api/state/latest`、`WS /ws/state` 已在纯有线路径下实测通过
+
 ## 当前状态说明
 
 代码已经完成到“可运行、可 dry-run、可在通网后直接 POST 联调”的阶段。
 
 因为当前还没有接网线，本次默认不把“实际与 RK3588 成功通信”作为完成标准；等网络接通后，按照上面的 `switch-mode -> run -> curl /api/state/latest` 流程即可继续联调验收。
+
+如果最终要求是“纯网口通信”，推荐给 RK3588 与 NUC 的有线网口分配单独的固定 IPv4 地址，并把 `rk3588.base_url` 配置为该有线 IP，而不是 Wi-Fi 地址或 Tailscale 地址。
