@@ -1,0 +1,133 @@
+{
+  "task": {
+    "id": "nuc-task-go-to-waypoint",
+    "type": "go_to_waypoint",
+    "status": "paused",
+    "progress_percent": 10,
+    "source": "nuc"
+  },
+  "navigation": {
+    "mode": "auto",
+    "status": "paused",
+    "goal_id": "wp-round3-ui",
+    "remaining_distance_m": 5.0
+  },
+  "alerts": [],
+  "updated_at": "2026-04-13T17:50:58Z",
+  "command_history": [
+    {
+      "command": "go_to_waypoint",
+      "source": "validation",
+      "requested_by": "codex",
+      "payload": {
+        "waypoint_id": "wp-round3-direct"
+      },
+      "received_at": "2026-04-13T17:40:36Z",
+      "accepted": true
+    },
+    {
+      "command": "pause_task",
+      "source": "validation",
+      "requested_by": "codex",
+      "payload": {},
+      "received_at": "2026-04-13T17:40:38Z",
+      "accepted": true
+    },
+    {
+      "command": "return_home",
+      "source": "validation",
+      "requested_by": "codex",
+      "payload": {},
+      "received_at": "2026-04-13T17:40:40Z",
+      "accepted": true
+    },
+    {
+      "command": "go_to_waypoint",
+      "source": "rk3588-connect-test",
+      "requested_by": "codex",
+      "payload": {
+        "waypoint_id": "wp-rk3588-direct"
+      },
+      "received_at": "2026-04-13T17:49:13Z",
+      "accepted": true
+    },
+    {
+      "command": "pause_task",
+      "source": "validation",
+      "requested_by": "codex",
+      "payload": {},
+      "received_at": "2026-04-13T17:49:50Z",
+      "accepted": true
+    },
+    {
+      "command": "return_home",
+      "source": "validation",
+      "requested_by": "codex",
+      "payload": {},
+      "received_at": "2026-04-13T17:49:50Z",
+      "accepted": true
+    },
+    {
+      "command": "go_to_waypoint",
+      "source": "validation",
+      "requested_by": "codex",
+      "payload": {
+        "waypoint_id": "wp-round3-bridge"
+      },
+      "received_at": "2026-04-13T17:49:50Z",
+      "accepted": true
+    },
+    {
+      "command": "go_to_waypoint",
+      "source": "validation-seq",
+      "requested_by": "codex",
+      "payload": {
+        "waypoint_id": "wp-round3-seq"
+      },
+      "received_at": "2026-04-13T17:50:08Z",
+      "accepted": true
+    },
+    {
+      "command": "pause_task",
+      "source": "validation-seq",
+      "requested_by": "codex",
+      "payload": {},
+      "received_at": "2026-04-13T17:50:08Z",
+      "accepted": true
+    },
+    {
+      "command": "return_home",
+      "source": "validation-seq",
+      "requested_by": "codex",
+      "payload": {},
+      "received_at": "2026-04-13T17:50:09Z",
+      "accepted": true
+    },
+    {
+      "command": "pause_task",
+      "source": "validation-ws",
+      "requested_by": "codex",
+      "payload": {},
+      "received_at": "2026-04-13T17:50:19Z",
+      "accepted": true
+    },
+    {
+      "command": "go_to_waypoint",
+      "source": "web",
+      "requested_by": "dashboard",
+      "payload": {
+        "waypoint_id": "wp-round3-ui"
+      },
+      "received_at": "2026-04-13T17:50:56Z",
+      "accepted": true
+    },
+    {
+      "command": "pause_task",
+      "source": "web",
+      "requested_by": "dashboard",
+      "payload": {},
+      "received_at": "2026-04-13T17:50:58Z",
+      "accepted": true
+    }
+  ]
+}

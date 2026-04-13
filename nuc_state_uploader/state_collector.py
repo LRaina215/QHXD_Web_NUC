@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .config import CollectorConfig
+from .runtime_state import RuntimeStateStore
 
 
 class Collector(Protocol):
@@ -17,6 +18,7 @@ class Collector(Protocol):
 @dataclass(slots=True)
 class MockStateCollector:
     frame_id: str = "map"
+    runtime_store: RuntimeStateStore | None = None
 
     def collect(self, seq: int) -> dict[str, Any]:
         angle = seq / 6.0
@@ -39,7 +41,7 @@ class MockStateCollector:
                 }
             )
 
-        return {
+        state = {
             "pose": {
                 "x": round(2.0 + math.cos(angle), 3),
                 "y": round(1.0 + math.sin(angle), 3),
@@ -74,6 +76,27 @@ class MockStateCollector:
             "alerts": alerts,
             "updated_at": None,
         }
+        return self._apply_runtime_overrides(state)
+
+    def _apply_runtime_overrides(self, state: dict[str, Any]) -> dict[str, Any]:
+        if not self.runtime_store:
+            return state
+
+        runtime_state = self.runtime_store.load()
+        runtime_task = runtime_state.get("task")
+        runtime_navigation = runtime_state.get("navigation")
+        runtime_alerts = runtime_state.get("alerts")
+        runtime_updated_at = runtime_state.get("updated_at")
+
+        if isinstance(runtime_task, dict):
+            state["task"].update(runtime_task)
+        if isinstance(runtime_navigation, dict):
+            state["navigation"].update(runtime_navigation)
+        if isinstance(runtime_alerts, list):
+            state["alerts"] = runtime_alerts
+        if runtime_updated_at:
+            state["updated_at"] = runtime_updated_at
+        return state
 
 
 @dataclass(slots=True)
@@ -91,7 +114,10 @@ class FileStateCollector:
 
 def build_collector(config: CollectorConfig) -> Collector:
     if config.type == "mock":
-        return MockStateCollector(frame_id=config.frame_id)
+        return MockStateCollector(
+            frame_id=config.frame_id,
+            runtime_store=RuntimeStateStore(config.runtime_state_file),
+        )
     if config.type == "file":
         if not config.state_file:
             raise ValueError("collector.state_file is required when collector.type=file")

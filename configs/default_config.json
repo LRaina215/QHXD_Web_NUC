@@ -14,6 +14,13 @@
     "type": "mock",
     "state_file": "examples/internal_state.sample.json",
     "frame_id": "map",
-    "source_name": "nuc"
+    "source_name": "nuc",
+    "runtime_state_file": "runtime/mission_state.json"
+  },
+  "mission_server": {
+    "host": "0.0.0.0",
+    "port": 8090,
+    "path": "/api/internal/rk3588/mission",
+    "runtime_state_file": "runtime/mission_state.json"
   }
 }

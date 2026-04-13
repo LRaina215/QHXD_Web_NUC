@@ -25,6 +25,15 @@ class CollectorConfig:
     state_file: str | None = None
     frame_id: str = "map"
     source_name: str = "nuc"
+    runtime_state_file: str = "runtime/mission_state.json"
+
+
+@dataclass(slots=True)
+class MissionServerConfig:
+    host: str = "0.0.0.0"
+    port: int = 8090
+    path: str = "/api/internal/rk3588/mission"
+    runtime_state_file: str = "runtime/mission_state.json"
 
 
 @dataclass(slots=True)
@@ -34,11 +43,13 @@ class AppConfig:
     dump_payload: bool = False
     rk3588: Rk3588Config = field(default_factory=Rk3588Config)
     collector: CollectorConfig = field(default_factory=CollectorConfig)
+    mission_server: MissionServerConfig = field(default_factory=MissionServerConfig)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AppConfig":
         rk3588_data = data.get("rk3588", {})
         collector_data = data.get("collector", {})
+        mission_server_data = data.get("mission_server", {})
 
         config = cls(
             send_interval_sec=float(data.get("send_interval_sec", 1.0)),
@@ -59,6 +70,17 @@ class AppConfig:
                 state_file=collector_data.get("state_file"),
                 frame_id=str(collector_data.get("frame_id", "map")),
                 source_name=str(collector_data.get("source_name", "nuc")),
+                runtime_state_file=str(
+                    collector_data.get("runtime_state_file", "runtime/mission_state.json")
+                ),
+            ),
+            mission_server=MissionServerConfig(
+                host=str(mission_server_data.get("host", "0.0.0.0")),
+                port=int(mission_server_data.get("port", 8090)),
+                path=str(mission_server_data.get("path", "/api/internal/rk3588/mission")),
+                runtime_state_file=str(
+                    mission_server_data.get("runtime_state_file", "runtime/mission_state.json")
+                ),
             ),
         )
 
@@ -66,6 +88,8 @@ class AppConfig:
             raise ValueError("send_interval_sec must be greater than 0")
         if config.rk3588.timeout_sec <= 0:
             raise ValueError("rk3588.timeout_sec must be greater than 0")
+        if config.mission_server.port <= 0:
+            raise ValueError("mission_server.port must be greater than 0")
 
         return config
 
