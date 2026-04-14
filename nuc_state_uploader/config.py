@@ -29,6 +29,13 @@ class CollectorConfig:
 
 
 @dataclass(slots=True)
+class RttCollectorConfig:
+    type: str = "mock"
+    state_file: str | None = None
+    source_name: str = "rtt"
+
+
+@dataclass(slots=True)
 class MissionServerConfig:
     host: str = "0.0.0.0"
     port: int = 8090
@@ -43,12 +50,14 @@ class AppConfig:
     dump_payload: bool = False
     rk3588: Rk3588Config = field(default_factory=Rk3588Config)
     collector: CollectorConfig = field(default_factory=CollectorConfig)
+    rtt_collector: RttCollectorConfig = field(default_factory=RttCollectorConfig)
     mission_server: MissionServerConfig = field(default_factory=MissionServerConfig)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AppConfig":
         rk3588_data = data.get("rk3588", {})
         collector_data = data.get("collector", {})
+        rtt_collector_data = data.get("rtt_collector", {})
         mission_server_data = data.get("mission_server", {})
 
         config = cls(
@@ -73,6 +82,11 @@ class AppConfig:
                 runtime_state_file=str(
                     collector_data.get("runtime_state_file", "runtime/mission_state.json")
                 ),
+            ),
+            rtt_collector=RttCollectorConfig(
+                type=str(rtt_collector_data.get("type", "mock")).lower(),
+                state_file=rtt_collector_data.get("state_file"),
+                source_name=str(rtt_collector_data.get("source_name", "rtt")),
             ),
             mission_server=MissionServerConfig(
                 host=str(mission_server_data.get("host", "0.0.0.0")),

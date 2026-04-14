@@ -83,7 +83,7 @@ def run_switch_mode(config: AppConfig, mode: str, source: str, requested_by: str
 
 
 def run_uploader(config: AppConfig, once: bool, dry_run: bool, print_payload: bool) -> int:
-    collector = build_collector(config.collector)
+    collector = build_collector(config.collector, config.rtt_collector)
     sender = Rk3588Sender(config.rk3588, LOGGER)
     seq = 0
 

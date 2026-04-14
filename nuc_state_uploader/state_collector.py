@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-from .config import CollectorConfig
+from .config import CollectorConfig, RttCollectorConfig
+from .rtt_state_collector import LowLevelCollector, build_rtt_collector
 from .runtime_state import RuntimeStateStore
 
 
@@ -19,6 +20,7 @@ class Collector(Protocol):
 class MockStateCollector:
     frame_id: str = "map"
     runtime_store: RuntimeStateStore | None = None
+    low_level_collector: LowLevelCollector | None = None
 
     def collect(self, seq: int) -> dict[str, Any]:
         angle = seq / 6.0
@@ -41,6 +43,25 @@ class MockStateCollector:
                 }
             )
 
+        low_level_state = self.low_level_collector.collect(seq) if self.low_level_collector else None
+        low_level_sections = (
+            low_level_state.as_internal_sections()
+            if low_level_state is not None
+            else {
+                "device": {
+                    "battery_percent": max(30, 100 - seq),
+                    "emergency_stop": False,
+                    "fault_code": None,
+                    "online": True,
+                },
+                "environment": {
+                    "temperature_c": None,
+                    "humidity_percent": None,
+                    "status": "offline",
+                },
+            }
+        )
+
         state = {
             "pose": {
                 "x": round(2.0 + math.cos(angle), 3),
@@ -62,17 +83,8 @@ class MockStateCollector:
                 "progress_percent": progress if seq else 0,
                 "source": "nuc",
             },
-            "device": {
-                "battery_percent": max(30, 100 - seq),
-                "emergency_stop": False,
-                "fault_code": None,
-                "online": True,
-            },
-            "environment": {
-                "temperature_c": None,
-                "humidity_percent": None,
-                "status": "offline",
-            },
+            "device": low_level_sections["device"],
+            "environment": low_level_sections["environment"],
             "alerts": alerts,
             "updated_at": None,
         }
@@ -108,11 +120,12 @@ class FileStateCollector:
         return payload
 
 
-def build_collector(config: CollectorConfig) -> Collector:
+def build_collector(config: CollectorConfig, rtt_config: RttCollectorConfig | None = None) -> Collector:
     if config.type == "mock":
         return MockStateCollector(
             frame_id=config.frame_id,
             runtime_store=RuntimeStateStore(config.runtime_state_file),
+            low_level_collector=build_rtt_collector(rtt_config or RttCollectorConfig()),
         )
     if config.type == "file":
         if not config.state_file:
