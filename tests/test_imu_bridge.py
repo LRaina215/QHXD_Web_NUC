@@ -35,6 +35,7 @@ class ImuBridgeTest(unittest.TestCase):
         self.assertEqual(payload["updated_at"], "2026-04-15T00:00:00.123456Z")
         self.assertEqual(payload["imu"]["frame_id"], "gimbal_pitch_odom")
         self.assertEqual(payload["imu"]["angular_velocity"]["z"], 0.3)
+        self.assertNotIn("source", payload["imu"])
 
     def test_mock_state_collector_delegates_latest_imu_to_low_level_collector(self) -> None:
         sample = NormalizedImuSample(

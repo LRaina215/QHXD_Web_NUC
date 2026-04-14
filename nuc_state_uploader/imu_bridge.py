@@ -36,7 +36,13 @@ class NormalizedImuSample:
         return {
             "source": self.source,
             "updated_at": self.timestamp,
-            "imu": self.as_dict(),
+            "imu": {
+                "frame_id": self.frame_id,
+                "timestamp": self.timestamp,
+                "orientation": asdict(self.orientation),
+                "angular_velocity": asdict(self.angular_velocity),
+                "linear_acceleration": asdict(self.linear_acceleration),
+            },
         }
 
 
