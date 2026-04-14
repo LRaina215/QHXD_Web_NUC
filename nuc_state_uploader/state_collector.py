@@ -86,16 +86,12 @@ class MockStateCollector:
         runtime_task = runtime_state.get("task")
         runtime_navigation = runtime_state.get("navigation")
         runtime_alerts = runtime_state.get("alerts")
-        runtime_updated_at = runtime_state.get("updated_at")
-
         if isinstance(runtime_task, dict):
             state["task"].update(runtime_task)
         if isinstance(runtime_navigation, dict):
             state["navigation"].update(runtime_navigation)
         if isinstance(runtime_alerts, list):
             state["alerts"] = runtime_alerts
-        if runtime_updated_at:
-            state["updated_at"] = runtime_updated_at
         return state
 
 
