@@ -181,6 +181,7 @@ python3 -m nuc_state_uploader.main --config configs/cboard_imu.sample.json inspe
   - 由 `/serial/imu` 或 `/serial/robot_motion` 是否新鲜驱动
 - `imu`
   - 为当前最新的真实 `sensor_msgs/Imu` 样本
+  - 如果 `/serial/receive` 可用，还会额外包含 `euler_deg.yaw/pitch/roll`
 
 如果 RK3588 后端后续提供了专用 IMU 接收接口，还可以直接做一次单次转发：
 
@@ -195,6 +196,129 @@ python3 -m nuc_state_uploader.main --config configs/cboard_imu.sample.json send-
 ```
 
 如果 RK3588 实际使用的是别的路径，请改 `rk3588.imu_endpoint`。
+
+当前方案 A 已启用：
+
+- 保留 `imu.orientation` 四元数
+- 同时补发 `imu.euler_deg`
+
+其中欧拉角来自：
+
+- `/serial/receive.x = yaw (deg)`
+- `/serial/receive.y = pitch (deg)`
+- `/serial/receive.z = roll (deg)`
+
+### 6.1 IMU 是否自动执行
+
+当前版本里，**IMU 读取与 IMU 转发都不会自动执行**。
+
+更准确地说：
+
+- `python3 -m nuc_state_uploader.main run`
+  - 只负责原有 `POST /api/internal/nuc/state` 状态上送
+  - **不会自动把 `/serial/imu` 连续转发给 RK3588**
+- `python3 -m nuc_state_uploader.main inspect-rtt`
+  - 只做一次当前低层状态与 IMU 读取检查
+- `python3 -m nuc_state_uploader.main send-imu-once`
+  - 只做一次当前 IMU 样本转发
+
+所以如果你要读 IMU 或把 IMU 发到 RK3588，当前都需要手动启动。
+
+### 6.2 IMU 启动方法
+
+#### 步骤 1：启动 C 板 ROS2 bridge
+
+先让 `/dev/ttyCBoard` 对应的 `standard_robot_pp_ros2` 跑起来：
+
+```bash
+cd /home/robomaster
+source /opt/ros/humble/setup.bash
+source /home/robomaster/pb2025/install/setup.bash
+ros2 launch standard_robot_pp_ros2 standard_robot_pp_ros2.launch.py log_level:=info
+```
+
+预期至少会看到：
+
+- `Serial port opened!`
+
+如果现场串口链路正常，后续 `inspect-rtt` 会看到非空 `imu`。
+
+#### 步骤 2：读取一次当前 IMU
+
+另开一个终端，执行：
+
+```bash
+cd /home/robomaster/QHXD_NUC
+python3 -m nuc_state_uploader.main --config configs/cboard_imu.sample.json inspect-rtt
+```
+
+预期输出中至少应看到：
+
+- `device.online = true`
+- `imu.frame_id`
+- `imu.timestamp`
+- `imu.orientation`
+- `imu.euler_deg.yaw`
+- `imu.euler_deg.pitch`
+- `imu.euler_deg.roll`
+- `imu.angular_velocity`
+- `imu.linear_acceleration`
+
+如果这里还是：
+
+- `device.online = false`
+- `imu = null`
+
+说明当前 C 板没有稳定送出新鲜 IMU 样本，需要先排查串口/BCP 链路。
+
+#### 步骤 3：向 RK3588 单次转发 IMU
+
+确认 RK3588 已启动并提供：
+
+- `POST /api/internal/nuc/imu`
+- `GET /api/imu/latest`
+
+再执行：
+
+```bash
+cd /home/robomaster/QHXD_NUC
+python3 -m nuc_state_uploader.main --config configs/cboard_imu.sample.json switch-mode --mode real --source imu-bridge --requested-by operator
+python3 -m nuc_state_uploader.main --config configs/cboard_imu.sample.json send-imu-once --print-payload
+```
+
+成功时会看到类似：
+
+- `accepted = true`
+- `imu_updated = true`
+
+然后可在 RK3588 侧检查：
+
+```bash
+curl --noproxy '*' http://192.168.10.2:8000/api/imu/latest
+```
+
+#### 步骤 4：实时看 IMU WebSocket
+
+如果 RK3588 前后端已经支持 IMU 展示，可以继续看：
+
+- `GET /api/imu/latest`
+- `WS /ws/imu`
+- 前端 IMU 调试卡片
+
+### 6.3 当前自动化边界
+
+当前还**没有**实现下面这类自动行为：
+
+- NUC 开机后自动启动 IMU bridge
+- `run` 启动后自动持续转发 IMU
+- `inspect-rtt` 成功后自动切 `real` 并自动发 IMU
+
+如果你后面希望它“像状态上送那样自动持续执行”，下一步可以再补一个连续 IMU bridge 命令，例如：
+
+- `run-imu`
+- 或把 IMU 转发并入一个统一守护进程
+
+目前这部分还没有做。
 
 ### 7. 联调时检查结果
 
@@ -246,6 +370,7 @@ python3 -m nuc_state_uploader.main run
     "type": "ros2",
     "source_name": "rtt",
     "imu_topic": "/serial/imu",
+    "receive_topic": "/serial/receive",
     "motion_topic": "/serial/robot_motion",
     "sample_timeout_sec": 0.5,
     "freshness_timeout_sec": 2.0
@@ -258,6 +383,7 @@ python3 -m nuc_state_uploader.main run
 - 判断 `device.online`
 - 读取 `velocity_mps`
 - 提取最新 IMU 样本
+- 提取 `yaw / pitch / roll (deg)` 并补进 `imu.euler_deg`
 
 由于当前 C 板侧还没有稳定提供电量、急停、故障码，所以这些字段暂时允许保持空值占位，后续再由更多 BCP 包补齐。
 
@@ -425,6 +551,8 @@ python3 -m nuc_state_uploader.main switch-mode --mode real
   - `mock`、`file` 或 `ros2`
 - `rtt_collector.imu_topic`
   - 真实 IMU 话题，默认 `/serial/imu`
+- `rtt_collector.receive_topic`
+  - 真实欧拉角话题，默认 `/serial/receive`
 - `rtt_collector.motion_topic`
   - 真实速度反馈话题，默认 `/serial/robot_motion`
 - `rtt_collector.sample_timeout_sec`

@@ -35,6 +35,7 @@ class RttCollectorConfig:
     state_file: str | None = None
     source_name: str = "rtt"
     imu_topic: str = "/serial/imu"
+    receive_topic: str = "/serial/receive"
     motion_topic: str = "/serial/robot_motion"
     sample_timeout_sec: float = 0.3
     freshness_timeout_sec: float = 2.0
@@ -98,6 +99,7 @@ class AppConfig:
                 state_file=rtt_collector_data.get("state_file"),
                 source_name=str(rtt_collector_data.get("source_name", "rtt")),
                 imu_topic=str(rtt_collector_data.get("imu_topic", "/serial/imu")),
+                receive_topic=str(rtt_collector_data.get("receive_topic", "/serial/receive")),
                 motion_topic=str(rtt_collector_data.get("motion_topic", "/serial/robot_motion")),
                 sample_timeout_sec=max(0.0, float(rtt_collector_data.get("sample_timeout_sec", 0.3))),
                 freshness_timeout_sec=max(

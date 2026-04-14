@@ -1,6 +1,12 @@
 import unittest
 
-from nuc_state_uploader.imu_bridge import NormalizedImuSample, QuaternionSample, Vector3Sample, ros_time_to_iso
+from nuc_state_uploader.imu_bridge import (
+    EulerDegSample,
+    NormalizedImuSample,
+    QuaternionSample,
+    Vector3Sample,
+    ros_time_to_iso,
+)
 from nuc_state_uploader.state_collector import MockStateCollector
 
 
@@ -26,6 +32,7 @@ class ImuBridgeTest(unittest.TestCase):
             orientation=QuaternionSample(x=0.0, y=0.0, z=0.1, w=0.99),
             angular_velocity=Vector3Sample(x=0.1, y=0.2, z=0.3),
             linear_acceleration=Vector3Sample(x=1.0, y=2.0, z=3.0),
+            euler_deg=EulerDegSample(yaw=11.0, pitch=-22.0, roll=33.0),
             source="rtt",
         )
 
@@ -35,6 +42,7 @@ class ImuBridgeTest(unittest.TestCase):
         self.assertEqual(payload["updated_at"], "2026-04-15T00:00:00.123456Z")
         self.assertEqual(payload["imu"]["frame_id"], "gimbal_pitch_odom")
         self.assertEqual(payload["imu"]["angular_velocity"]["z"], 0.3)
+        self.assertEqual(payload["imu"]["euler_deg"]["yaw"], 11.0)
         self.assertNotIn("source", payload["imu"])
 
     def test_mock_state_collector_delegates_latest_imu_to_low_level_collector(self) -> None:

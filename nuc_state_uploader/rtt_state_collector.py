@@ -8,11 +8,11 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import rclpy
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, Vector3
 from sensor_msgs.msg import Imu
 
 from .config import RttCollectorConfig
-from .imu_bridge import NormalizedImuSample, QuaternionSample, Vector3Sample, ros_time_to_iso
+from .imu_bridge import EulerDegSample, NormalizedImuSample, QuaternionSample, Vector3Sample, ros_time_to_iso
 
 
 def _normalize_optional_str(value: Any) -> str | None:
@@ -155,14 +155,17 @@ class FileRttStateCollector:
 @dataclass(slots=True)
 class Ros2TopicRttStateCollector:
     imu_topic: str = "/serial/imu"
+    receive_topic: str = "/serial/receive"
     motion_topic: str = "/serial/robot_motion"
     source: str = "rtt"
     sample_timeout_sec: float = 0.3
     freshness_timeout_sec: float = 2.0
     _node: Any = field(init=False, repr=False)
     _latest_imu: NormalizedImuSample | None = field(init=False, default=None, repr=False)
+    _latest_receive: Vector3 | None = field(init=False, default=None, repr=False)
     _latest_motion: Twist | None = field(init=False, default=None, repr=False)
     _latest_imu_received_monotonic: float = field(init=False, default=0.0, repr=False)
+    _latest_receive_received_monotonic: float = field(init=False, default=0.0, repr=False)
     _latest_motion_received_monotonic: float = field(init=False, default=0.0, repr=False)
 
     def __post_init__(self) -> None:
@@ -171,6 +174,7 @@ class Ros2TopicRttStateCollector:
         node_name = f"nuc_rtt_state_collector_{int(time.time() * 1000)}"
         self._node = rclpy.create_node(node_name)
         self._node.create_subscription(Imu, self.imu_topic, self._on_imu, 10)
+        self._node.create_subscription(Vector3, self.receive_topic, self._on_receive, 10)
         self._node.create_subscription(Twist, self.motion_topic, self._on_motion, 10)
 
     def collect(self, seq: int) -> NormalizedLowLevelState:
@@ -246,18 +250,35 @@ class Ros2TopicRttStateCollector:
                 y=float(message.linear_acceleration.y),
                 z=float(message.linear_acceleration.z),
             ),
+            euler_deg=self._build_euler_deg(time.monotonic()),
             source=self.source,
         )
         self._latest_imu_received_monotonic = time.monotonic()
+
+    def _on_receive(self, message: Vector3) -> None:
+        self._latest_receive = message
+        self._latest_receive_received_monotonic = time.monotonic()
+        if self._latest_imu is not None:
+            self._latest_imu.euler_deg = self._build_euler_deg(time.monotonic())
 
     def _on_motion(self, message: Twist) -> None:
         self._latest_motion = message
         self._latest_motion_received_monotonic = time.monotonic()
 
+    def _build_euler_deg(self, now: float) -> EulerDegSample | None:
+        if self._latest_receive is None or not self._is_fresh(self._latest_receive_received_monotonic, now):
+            return None
+        return EulerDegSample(
+            yaw=float(self._latest_receive.x),
+            pitch=float(self._latest_receive.y),
+            roll=float(self._latest_receive.z),
+        )
+
 
 def _build_ros2_topic_collector(config: RttCollectorConfig) -> Ros2TopicRttStateCollector:
     return Ros2TopicRttStateCollector(
         imu_topic=config.imu_topic,
+        receive_topic=config.receive_topic,
         motion_topic=config.motion_topic,
         source=config.source_name,
         sample_timeout_sec=config.sample_timeout_sec,

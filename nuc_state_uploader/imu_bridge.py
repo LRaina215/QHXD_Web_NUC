@@ -21,12 +21,20 @@ class QuaternionSample:
 
 
 @dataclass(slots=True)
+class EulerDegSample:
+    yaw: float
+    pitch: float
+    roll: float
+
+
+@dataclass(slots=True)
 class NormalizedImuSample:
     frame_id: str
     timestamp: str
     orientation: QuaternionSample
     angular_velocity: Vector3Sample
     linear_acceleration: Vector3Sample
+    euler_deg: EulerDegSample | None = None
     source: str = "rtt"
 
     def as_dict(self) -> dict[str, Any]:
@@ -40,6 +48,7 @@ class NormalizedImuSample:
                 "frame_id": self.frame_id,
                 "timestamp": self.timestamp,
                 "orientation": asdict(self.orientation),
+                **({"euler_deg": asdict(self.euler_deg)} if self.euler_deg is not None else {}),
                 "angular_velocity": asdict(self.angular_velocity),
                 "linear_acceleration": asdict(self.linear_acceleration),
             },

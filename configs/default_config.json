@@ -23,6 +23,7 @@
     "state_file": null,
     "source_name": "rtt",
     "imu_topic": "/serial/imu",
+    "receive_topic": "/serial/receive",
     "motion_topic": "/serial/robot_motion",
     "sample_timeout_sec": 0.3,
     "freshness_timeout_sec": 2.0

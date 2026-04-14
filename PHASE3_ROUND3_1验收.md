@@ -696,3 +696,82 @@ Connection: Upgrade
 因此当前可正式表述为：
 
 - **Phase 3 Round 3.1 的真实 C 板 IMU -> NUC -> RK3588 最小专项链路验收通过**
+
+## 方案 A 兼容升级补充
+
+在 RK3588 端按方案 A 补齐 `imu.euler_deg` 兼容后，NUC 侧也已完成对应适配。
+
+当前 NUC 侧实现更新为：
+
+- 保留原有 `imu.orientation` 四元数
+- 如果 `/serial/receive` 可用，则额外补发：
+  - `imu.euler_deg.yaw`
+  - `imu.euler_deg.pitch`
+  - `imu.euler_deg.roll`
+
+其中映射关系为：
+
+- `/serial/receive.x = yaw (deg)`
+- `/serial/receive.y = pitch (deg)`
+- `/serial/receive.z = roll (deg)`
+
+本次对应代码改动已落在：
+
+- [config.py](/home/robomaster/QHXD_NUC/nuc_state_uploader/config.py#L1)
+  - 新增 `rtt_collector.receive_topic`
+- [rtt_state_collector.py](/home/robomaster/QHXD_NUC/nuc_state_uploader/rtt_state_collector.py#L1)
+  - 新增对 `/serial/receive` 的订阅
+  - 将欧拉角合并进 `NormalizedImuSample`
+- [imu_bridge.py](/home/robomaster/QHXD_NUC/nuc_state_uploader/imu_bridge.py#L1)
+  - 新增 `EulerDegSample`
+  - `as_payload()` 在存在欧拉角时自动补 `imu.euler_deg`
+- [cboard_imu.sample.json](/home/robomaster/QHXD_NUC/configs/cboard_imu.sample.json#L1)
+  - 默认增加 `receive_topic = /serial/receive`
+- [README.md](/home/robomaster/QHXD_NUC/README.md#L1)
+  - 已补充方案 A 的启动与字段说明
+
+单元测试已重新执行：
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+结果：
+
+- `Ran 12 tests`
+- `OK`
+
+## 方案 A 本次现场状态
+
+本次我已实际重新启动：
+
+```bash
+ros2 launch standard_robot_pp_ros2 standard_robot_pp_ros2.launch.py log_level:=info
+```
+
+日志中仍然出现：
+
+- `Serial port opened!`
+- `No valid BCP frame for 12001 ms, forcing serial reopen.`
+
+随后再次执行：
+
+```bash
+python3 -m nuc_state_uploader.main --config configs/cboard_imu.sample.json inspect-rtt
+python3 -m nuc_state_uploader.main --config configs/cboard_imu.sample.json send-imu-once --dry-run --print-payload
+```
+
+本次现场结果是：
+
+- 仍未拿到新鲜 IMU 样本
+- 因此本次也还没有拿到新的 `euler_deg` 实测值
+
+这说明：
+
+- **方案 A 的 NUC 侧代码已经就绪**
+- **但这一次现场窗口里，C 板串口数据流仍未稳定到足以产出新的欧拉角样本**
+
+所以当前最准确的口径是：
+
+- NUC 侧已经支持按方案 A 补发 `imu.euler_deg`
+- 只要现场 `/serial/receive` 出现新鲜值，就会随 IMU payload 一起发出
