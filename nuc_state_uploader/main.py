@@ -43,6 +43,27 @@ def parse_args() -> argparse.Namespace:
         help="Print the payload JSON before sending.",
     )
 
+    inspect_rtt_parser = subparsers.add_parser(
+        "inspect-rtt",
+        help="Print one low-level RT-Thread sample and the latest IMU sample if available.",
+    )
+    inspect_rtt_parser.add_argument(
+        "--print-payload",
+        action="store_true",
+        help="Also print the merged state payload built from the current sample.",
+    )
+
+    imu_once_parser = subparsers.add_parser(
+        "send-imu-once",
+        help="Collect one real IMU sample and optionally forward it to RK3588.",
+    )
+    imu_once_parser.add_argument("--dry-run", action="store_true", help="Build one IMU payload without sending it.")
+    imu_once_parser.add_argument(
+        "--print-payload",
+        action="store_true",
+        help="Print the IMU payload JSON before sending.",
+    )
+
     switch_mode_parser = subparsers.add_parser("switch-mode", help="Switch RK3588 backend mode.")
     switch_mode_parser.add_argument("--mode", default="real", choices=["real", "mock"])
     switch_mode_parser.add_argument("--source", default="nuc-uploader")
@@ -70,6 +91,10 @@ def main() -> int:
         return run_switch_mode(config, args.mode, args.source, args.requested_by)
     if args.command == "serve-mission":
         return run_mission_server(config)
+    if args.command == "inspect-rtt":
+        return run_inspect_rtt(config, print_payload=args.print_payload)
+    if args.command == "send-imu-once":
+        return run_send_imu(config, dry_run=args.dry_run, print_payload=args.print_payload)
 
     return run_uploader(config, once=args.command == "send-once", dry_run=args.dry_run, print_payload=args.print_payload)
 
@@ -115,6 +140,54 @@ def run_uploader(config: AppConfig, once: bool, dry_run: bool, print_payload: bo
         return 0
 
     return 0
+
+
+def run_inspect_rtt(config: AppConfig, print_payload: bool) -> int:
+    collector = build_collector(config.collector, config.rtt_collector)
+    raw_state = collector.collect(0)
+    output = {
+        "device": raw_state.get("device"),
+        "environment": raw_state.get("environment"),
+        "imu": None,
+    }
+    latest_imu = collector.latest_imu_sample()
+    if latest_imu is not None:
+        output["imu"] = latest_imu.as_dict()
+    print(json.dumps(output, ensure_ascii=False, indent=2))
+
+    if print_payload:
+        payload = build_payload(raw_state, default_source=config.collector.source_name)
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+
+    return 0 if latest_imu is not None else 1
+
+
+def run_send_imu(config: AppConfig, dry_run: bool, print_payload: bool) -> int:
+    collector = build_collector(config.collector, config.rtt_collector)
+    collector.collect(0)
+    imu_sample = collector.latest_imu_sample()
+    if imu_sample is None:
+        LOGGER.error("No fresh IMU sample is available from the current low-level collector.")
+        return 1
+
+    payload = imu_sample.as_payload()
+    if print_payload or config.dump_payload:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+
+    if dry_run:
+        LOGGER.info("Dry-run enabled, IMU payload built but not sent.")
+        return 0
+
+    sender = Rk3588Sender(config.rk3588, LOGGER)
+    try:
+        response = sender.post_imu(payload)
+    except ValueError as exc:
+        LOGGER.error("%s", exc)
+        return 1
+
+    if response.body_text:
+        LOGGER.info("IMU send response: %s", response.body_text)
+    return 0 if response.ok else 1
 
 
 def run_mission_server(config: AppConfig) -> int:

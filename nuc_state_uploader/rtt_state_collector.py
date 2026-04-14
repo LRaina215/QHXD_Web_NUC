@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import asdict, dataclass
+import time
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+import rclpy
+from geometry_msgs.msg import Twist
+from sensor_msgs.msg import Imu
+
 from .config import RttCollectorConfig
+from .imu_bridge import NormalizedImuSample, QuaternionSample, Vector3Sample, ros_time_to_iso
 
 
 def _normalize_optional_str(value: Any) -> str | None:
@@ -86,6 +92,9 @@ class LowLevelCollector(Protocol):
     def collect(self, seq: int) -> NormalizedLowLevelState:
         ...
 
+    def latest_imu_sample(self) -> NormalizedImuSample | None:
+        ...
+
 
 @dataclass(slots=True)
 class MockRttStateCollector:
@@ -108,6 +117,9 @@ class MockRttStateCollector:
             env_status="offline",
             source=self.source,
         )
+
+    def latest_imu_sample(self) -> NormalizedImuSample | None:
+        return None
 
 
 @dataclass(slots=True)
@@ -136,6 +148,122 @@ class FileRttStateCollector:
             source=_normalize_optional_str(payload.get("source")) or self.source,
         )
 
+    def latest_imu_sample(self) -> NormalizedImuSample | None:
+        return None
+
+
+@dataclass(slots=True)
+class Ros2TopicRttStateCollector:
+    imu_topic: str = "/serial/imu"
+    motion_topic: str = "/serial/robot_motion"
+    source: str = "rtt"
+    sample_timeout_sec: float = 0.3
+    freshness_timeout_sec: float = 2.0
+    _node: Any = field(init=False, repr=False)
+    _latest_imu: NormalizedImuSample | None = field(init=False, default=None, repr=False)
+    _latest_motion: Twist | None = field(init=False, default=None, repr=False)
+    _latest_imu_received_monotonic: float = field(init=False, default=0.0, repr=False)
+    _latest_motion_received_monotonic: float = field(init=False, default=0.0, repr=False)
+
+    def __post_init__(self) -> None:
+        if not rclpy.ok():
+            rclpy.init(args=None)
+        node_name = f"nuc_rtt_state_collector_{int(time.time() * 1000)}"
+        self._node = rclpy.create_node(node_name)
+        self._node.create_subscription(Imu, self.imu_topic, self._on_imu, 10)
+        self._node.create_subscription(Twist, self.motion_topic, self._on_motion, 10)
+
+    def collect(self, seq: int) -> NormalizedLowLevelState:
+        del seq
+        self._spin_for_messages()
+        now = time.monotonic()
+        imu_fresh = self._is_fresh(self._latest_imu_received_monotonic, now)
+        motion_fresh = self._is_fresh(self._latest_motion_received_monotonic, now)
+        velocity = None
+        if motion_fresh and self._latest_motion is not None:
+            velocity = round(
+                math.hypot(self._latest_motion.linear.x, self._latest_motion.linear.y),
+                3,
+            )
+
+        return NormalizedLowLevelState(
+            battery_percent=None,
+            emergency_stop=False,
+            fault_code=None,
+            online=imu_fresh or motion_fresh,
+            velocity_mps=velocity,
+            temperature_c=None,
+            humidity_percent=None,
+            env_status="offline",
+            source=self.source,
+        )
+
+    def latest_imu_sample(self) -> NormalizedImuSample | None:
+        self._spin_for_messages()
+        if not self._is_fresh(self._latest_imu_received_monotonic, time.monotonic()):
+            return None
+        return self._latest_imu
+
+    def close(self) -> None:
+        self._node.destroy_node()
+
+    def _spin_for_messages(self) -> None:
+        deadline = time.monotonic() + max(self.sample_timeout_sec, 0.0)
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            rclpy.spin_once(self._node, timeout_sec=min(remaining, 0.05))
+
+    def _is_fresh(self, received_monotonic: float, now: float) -> bool:
+        if received_monotonic <= 0:
+            return False
+        return (now - received_monotonic) <= self.freshness_timeout_sec
+
+    def _on_imu(self, message: Imu) -> None:
+        stamp = message.header.stamp
+        if stamp.sec == 0 and stamp.nanosec == 0:
+            timestamp = ros_time_to_iso(int(time.time()), 0)
+        else:
+            timestamp = ros_time_to_iso(stamp.sec, stamp.nanosec)
+
+        self._latest_imu = NormalizedImuSample(
+            frame_id=message.header.frame_id or "imu_link",
+            timestamp=timestamp,
+            orientation=QuaternionSample(
+                x=float(message.orientation.x),
+                y=float(message.orientation.y),
+                z=float(message.orientation.z),
+                w=float(message.orientation.w),
+            ),
+            angular_velocity=Vector3Sample(
+                x=float(message.angular_velocity.x),
+                y=float(message.angular_velocity.y),
+                z=float(message.angular_velocity.z),
+            ),
+            linear_acceleration=Vector3Sample(
+                x=float(message.linear_acceleration.x),
+                y=float(message.linear_acceleration.y),
+                z=float(message.linear_acceleration.z),
+            ),
+            source=self.source,
+        )
+        self._latest_imu_received_monotonic = time.monotonic()
+
+    def _on_motion(self, message: Twist) -> None:
+        self._latest_motion = message
+        self._latest_motion_received_monotonic = time.monotonic()
+
+
+def _build_ros2_topic_collector(config: RttCollectorConfig) -> Ros2TopicRttStateCollector:
+    return Ros2TopicRttStateCollector(
+        imu_topic=config.imu_topic,
+        motion_topic=config.motion_topic,
+        source=config.source_name,
+        sample_timeout_sec=config.sample_timeout_sec,
+        freshness_timeout_sec=config.freshness_timeout_sec,
+    )
+
 
 def build_rtt_collector(config: RttCollectorConfig) -> LowLevelCollector:
     if config.type == "mock":
@@ -144,4 +272,6 @@ def build_rtt_collector(config: RttCollectorConfig) -> LowLevelCollector:
         if not config.state_file:
             raise ValueError("rtt_collector.state_file is required when rtt_collector.type=file")
         return FileRttStateCollector(state_file=Path(config.state_file), source=config.source_name)
+    if config.type == "ros2":
+        return _build_ros2_topic_collector(config)
     raise ValueError(f"unsupported rtt_collector.type: {config.type}")

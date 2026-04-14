@@ -7,12 +7,16 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .config import CollectorConfig, RttCollectorConfig
+from .imu_bridge import NormalizedImuSample
 from .rtt_state_collector import LowLevelCollector, build_rtt_collector
 from .runtime_state import RuntimeStateStore
 
 
 class Collector(Protocol):
     def collect(self, seq: int) -> dict[str, Any]:
+        ...
+
+    def latest_imu_sample(self) -> NormalizedImuSample | None:
         ...
 
 
@@ -106,6 +110,14 @@ class MockStateCollector:
             state["alerts"] = runtime_alerts
         return state
 
+    def latest_imu_sample(self) -> NormalizedImuSample | None:
+        if not self.low_level_collector:
+            return None
+        latest = getattr(self.low_level_collector, "latest_imu_sample", None)
+        if not callable(latest):
+            return None
+        return latest()
+
 
 @dataclass(slots=True)
 class FileStateCollector:
@@ -118,6 +130,9 @@ class FileStateCollector:
         if not isinstance(payload, dict):
             raise ValueError(f"state file must contain a JSON object: {self.state_file}")
         return payload
+
+    def latest_imu_sample(self) -> NormalizedImuSample | None:
+        return None
 
 
 def build_collector(config: CollectorConfig, rtt_config: RttCollectorConfig | None = None) -> Collector:

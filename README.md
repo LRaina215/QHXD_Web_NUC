@@ -4,6 +4,7 @@
 
 - `NUC -> RK3588` 的网口状态上发链路
 - `RK3588 -> NUC` 的 mission 接口接收服务
+- `C板 / RT-Thread -> NUC` 的真实低层采集入口
 
 目标是把真实状态回传和任务桥接都先打通。
 
@@ -26,8 +27,13 @@
 - `nuc_state_uploader/state_mapper.py`
   - 负责把内部字段映射成 RK3588 Phase 2 JSON 契约
   - 负责默认值补齐、枚举归一化、数值裁剪
+- `nuc_state_uploader/rtt_state_collector.py`
+  - 负责采集 C 板 / RT-Thread 低层状态
+  - 当前提供 `mock`、`file`、`ros2` 三种低层采集模式
 - `nuc_state_uploader/rk3588_sender.py`
   - 负责 HTTP POST、超时、最小重试和返回日志
+- `nuc_state_uploader/imu_bridge.py`
+  - 负责把真实 IMU 话题归一化成可转发的 JSON 结构
 - `nuc_state_uploader/main.py`
   - 命令行入口
 - `nuc_state_uploader/mission_server.py`
@@ -38,6 +44,8 @@
   - 默认启动配置
 - `examples/internal_state.sample.json`
   - `file` 采集器的示例输入
+- `configs/cboard_imu.sample.json`
+  - C 板 / RT-Thread 实机 IMU 联调配置样例
 
 ## 环境要求
 
@@ -145,7 +153,50 @@ python3 -m nuc_state_uploader.main send-once --print-payload
 python3 -m nuc_state_uploader.main run
 ```
 
-### 6. 联调时检查结果
+### 6. 真实 C 板 / IMU 联调
+
+如果当前 C 板已经通过 `standard_robot_pp_ros2` 把真实 IMU 发布到 ROS2：
+
+```bash
+source /opt/ros/humble/setup.bash
+source /home/robomaster/pb2025/install/setup.bash
+ros2 launch standard_robot_pp_ros2 standard_robot_pp_ros2.launch.py
+```
+
+可使用样例配置检查 NUC 是否已经拿到真实低层链路：
+
+```bash
+python3 -m nuc_state_uploader.main --config configs/cboard_imu.sample.json inspect-rtt
+```
+
+这条命令会打印：
+
+- `device`
+- `environment`
+- `imu`
+
+其中：
+
+- `device.online`
+  - 由 `/serial/imu` 或 `/serial/robot_motion` 是否新鲜驱动
+- `imu`
+  - 为当前最新的真实 `sensor_msgs/Imu` 样本
+
+如果 RK3588 后端后续提供了专用 IMU 接收接口，还可以直接做一次单次转发：
+
+```bash
+python3 -m nuc_state_uploader.main --config configs/cboard_imu.sample.json send-imu-once --print-payload
+```
+
+默认样例配置里的 IMU 接口路径是：
+
+```text
+/api/internal/nuc/imu
+```
+
+如果 RK3588 实际使用的是别的路径，请改 `rk3588.imu_endpoint`。
+
+### 7. 联调时检查结果
 
 检查 RK3588 最新状态：
 
@@ -184,6 +235,31 @@ curl --noproxy '*' -X POST http://<NUC_IP>:8090/api/internal/rk3588/mission \
 ```bash
 python3 -m nuc_state_uploader.main run
 ```
+
+### 真实低层模式：`ros2`
+
+当 C 板已经通过 `standard_robot_pp_ros2` 提供 ROS2 话题时，可以把低层采集切到真实模式：
+
+```json
+{
+  "rtt_collector": {
+    "type": "ros2",
+    "source_name": "rtt",
+    "imu_topic": "/serial/imu",
+    "motion_topic": "/serial/robot_motion",
+    "sample_timeout_sec": 0.5,
+    "freshness_timeout_sec": 2.0
+  }
+}
+```
+
+当前这条真实低层链路主要用于：
+
+- 判断 `device.online`
+- 读取 `velocity_mps`
+- 提取最新 IMU 样本
+
+由于当前 C 板侧还没有稳定提供电量、急停、故障码，所以这些字段暂时允许保持空值占位，后续再由更多 BCP 包补齐。
 
 ### 文件模式：`file`
 
@@ -251,6 +327,22 @@ python3 -m nuc_state_uploader.main run
 4. 在 `configs/default_config.json` 里切换到新的类型
 
 这样不会影响已有 `mock` 和 `file` 调试链路。
+
+### 方案 C：继续扩真实 C 板字段
+
+如果后续 C 板补上新的 BCP 包，建议继续在 `nuc_state_uploader/rtt_state_collector.py` 扩展，而不是把底层协议解析塞回主采集器。
+
+当前已经预留好的真实入口有：
+
+- `/serial/imu`
+- `/serial/robot_motion`
+
+后续可以继续往里补：
+
+- 电量
+- 急停
+- 故障码
+- 更多环境量
 
 ## 调试与排查
 
@@ -326,6 +418,19 @@ python3 -m nuc_state_uploader.main switch-mode --mode real
   - mission 服务路径，默认 `/api/internal/rk3588/mission`
 - `mission_server.runtime_state_file`
   - mission 服务写入的运行态文件，通常应与 `collector.runtime_state_file` 保持一致
+- `rk3588.imu_endpoint`
+  - 可选的 IMU HTTP 转发路径
+  - 只有当 RK3588 后端提供专用 IMU 接口时才需要配置
+- `rtt_collector.type`
+  - `mock`、`file` 或 `ros2`
+- `rtt_collector.imu_topic`
+  - 真实 IMU 话题，默认 `/serial/imu`
+- `rtt_collector.motion_topic`
+  - 真实速度反馈话题，默认 `/serial/robot_motion`
+- `rtt_collector.sample_timeout_sec`
+  - 单次采样时的 ROS2 spin 等待时间
+- `rtt_collector.freshness_timeout_sec`
+  - 判断真实低层链路是否在线的超时时间
 
 ## 自测命令
 
@@ -349,6 +454,8 @@ python3 -m unittest discover -s tests
 - NUC 有线网口 `enp89s0` 保留激光雷达地址 `192.168.1.50/24`
 - 为 RK3588 联调额外挂第二地址：`192.168.10.3/24`
 - `POST /api/internal/nuc/state`、`GET /api/state/latest`、`WS /ws/state` 已在纯有线路径下实测通过
+- C 板 / RT-Thread 真实 IMU 接入与本轮现场结论见：
+  - [PHASE3_ROUND3_1验收.md](/home/robomaster/QHXD_NUC/PHASE3_ROUND3_1验收.md#L1)
 
 ## 当前状态说明
 

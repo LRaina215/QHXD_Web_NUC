@@ -3,9 +3,9 @@
   "log_level": "INFO",
   "dump_payload": false,
   "rk3588": {
-    "base_url": "http://127.0.0.1:8000",
+    "base_url": "http://192.168.10.2:8000",
     "state_endpoint": "/api/internal/nuc/state",
-    "imu_endpoint": null,
+    "imu_endpoint": "/api/internal/nuc/imu",
     "mode_switch_endpoint": "/api/system/mode/switch",
     "timeout_sec": 2.0,
     "retry_count": 1,
@@ -13,18 +13,16 @@
   },
   "collector": {
     "type": "mock",
-    "state_file": "examples/internal_state.sample.json",
     "frame_id": "map",
     "source_name": "nuc",
     "runtime_state_file": "runtime/mission_state.json"
   },
   "rtt_collector": {
-    "type": "mock",
-    "state_file": null,
+    "type": "ros2",
     "source_name": "rtt",
     "imu_topic": "/serial/imu",
     "motion_topic": "/serial/robot_motion",
-    "sample_timeout_sec": 0.3,
+    "sample_timeout_sec": 0.5,
     "freshness_timeout_sec": 2.0
   },
   "mission_server": {

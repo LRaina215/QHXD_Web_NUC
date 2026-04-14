@@ -13,6 +13,7 @@ DEFAULT_CONFIG_PATH = Path("configs/default_config.json")
 class Rk3588Config:
     base_url: str = "http://127.0.0.1:8000"
     state_endpoint: str = "/api/internal/nuc/state"
+    imu_endpoint: str | None = None
     mode_switch_endpoint: str = "/api/system/mode/switch"
     timeout_sec: float = 2.0
     retry_count: int = 1
@@ -33,6 +34,10 @@ class RttCollectorConfig:
     type: str = "mock"
     state_file: str | None = None
     source_name: str = "rtt"
+    imu_topic: str = "/serial/imu"
+    motion_topic: str = "/serial/robot_motion"
+    sample_timeout_sec: float = 0.3
+    freshness_timeout_sec: float = 2.0
 
 
 @dataclass(slots=True)
@@ -67,6 +72,11 @@ class AppConfig:
             rk3588=Rk3588Config(
                 base_url=str(rk3588_data.get("base_url", "http://127.0.0.1:8000")).rstrip("/"),
                 state_endpoint=str(rk3588_data.get("state_endpoint", "/api/internal/nuc/state")),
+                imu_endpoint=(
+                    str(rk3588_data["imu_endpoint"])
+                    if rk3588_data.get("imu_endpoint") is not None
+                    else None
+                ),
                 mode_switch_endpoint=str(
                     rk3588_data.get("mode_switch_endpoint", "/api/system/mode/switch")
                 ),
@@ -87,6 +97,12 @@ class AppConfig:
                 type=str(rtt_collector_data.get("type", "mock")).lower(),
                 state_file=rtt_collector_data.get("state_file"),
                 source_name=str(rtt_collector_data.get("source_name", "rtt")),
+                imu_topic=str(rtt_collector_data.get("imu_topic", "/serial/imu")),
+                motion_topic=str(rtt_collector_data.get("motion_topic", "/serial/robot_motion")),
+                sample_timeout_sec=max(0.0, float(rtt_collector_data.get("sample_timeout_sec", 0.3))),
+                freshness_timeout_sec=max(
+                    0.0, float(rtt_collector_data.get("freshness_timeout_sec", 2.0))
+                ),
             ),
             mission_server=MissionServerConfig(
                 host=str(mission_server_data.get("host", "0.0.0.0")),

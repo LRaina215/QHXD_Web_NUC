@@ -31,6 +31,12 @@ class Rk3588Sender:
         url = f"{self.config.base_url}{self.config.state_endpoint}"
         return self._post_json(url, payload, retry_http_5xx=True)
 
+    def post_imu(self, payload: dict[str, Any]) -> SenderResponse:
+        if not self.config.imu_endpoint:
+            raise ValueError("rk3588.imu_endpoint is not configured")
+        url = f"{self.config.base_url}{self.config.imu_endpoint}"
+        return self._post_json(url, payload, retry_http_5xx=True)
+
     def switch_mode(
         self,
         mode: str = "real",
