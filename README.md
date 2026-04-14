@@ -1,11 +1,17 @@
 # QHXD_NUC
 
-本目录实现了 `NUC -> RK3588` 的最小网口状态上发链路，目标是先把 Phase 2 当前要求的真实状态回传打通。
+本目录实现了两条 NUC 侧联调能力：
+
+- `NUC -> RK3588` 的网口状态上发链路
+- `RK3588 -> NUC` 的 mission 接口接收服务
+
+目标是把真实状态回传和任务桥接都先打通。
 
 当前实现满足 `NUC_DO.md` 里的这些要求：
 
 - 按 `state_collector / state_mapper / rk3588_sender` 三层拆分
 - 周期性向 `POST /api/internal/nuc/state` 上发状态
+- 提供 `POST /api/internal/rk3588/mission` 本地服务
 - 默认发送频率 `1 Hz`
 - 默认超时 `2s`
 - 默认失败重试 `1` 次
@@ -24,6 +30,10 @@
   - 负责 HTTP POST、超时、最小重试和返回日志
 - `nuc_state_uploader/main.py`
   - 命令行入口
+- `nuc_state_uploader/mission_server.py`
+  - 负责启动 NUC mission HTTP 服务
+- `nuc_state_uploader/runtime_state.py`
+  - 负责保存任务桥接后的运行态，并回流到状态上送
 - `configs/default_config.json`
   - 默认启动配置
 - `examples/internal_state.sample.json`
@@ -79,7 +89,49 @@ curl --noproxy '*' -X POST http://<RK3588_IP>:8000/api/system/mode/switch \
   -d '{"mode":"real","source":"integration-test","requested_by":"operator"}'
 ```
 
-### 4. 真正开始上发
+### 4. 启动 NUC mission 服务
+
+如果需要让 RK3588 把任务下发到 NUC，需要先启动 mission 服务。
+
+默认监听地址来自 `configs/default_config.json`：
+
+- `host = 0.0.0.0`
+- `port = 8090`
+- `path = /api/internal/rk3588/mission`
+
+也就是默认对外提供：
+
+```text
+http://<NUC_IP>:8090/api/internal/rk3588/mission
+```
+
+启动命令：
+
+```bash
+python3 -m nuc_state_uploader.main serve-mission
+```
+
+如果你使用自定义配置文件：
+
+```bash
+python3 -m nuc_state_uploader.main --config /tmp/qhxd_round4_config.json serve-mission
+```
+
+启动成功后，终端会看到类似日志：
+
+```text
+Mission server listening on 0.0.0.0:8090/api/internal/rk3588/mission
+```
+
+当前支持的命令包括：
+
+- `go_to_waypoint`
+- `start_patrol`
+- `pause_task`
+- `resume_task`
+- `return_home`
+
+### 5. 真正开始上发
 
 单次发送：
 
@@ -93,7 +145,7 @@ python3 -m nuc_state_uploader.main send-once --print-payload
 python3 -m nuc_state_uploader.main run
 ```
 
-### 5. 联调时检查结果
+### 6. 联调时检查结果
 
 检查 RK3588 最新状态：
 
@@ -106,6 +158,20 @@ curl --noproxy '*' http://<RK3588_IP>:8000/api/state/latest
 - `task_status.source` 为 `nuc`
 - `system_mode.mode` 为 `real`
 - `robot_pose`、`battery_percent`、`current_goal` 等字段与 NUC 发送值一致
+
+如果还要联调任务桥接，可以直接从 NUC 本机先验证 mission 服务：
+
+```bash
+curl --noproxy '*' -X POST http://<NUC_IP>:8090/api/internal/rk3588/mission \
+  -H 'Content-Type: application/json' \
+  -d '{"command":"go_to_waypoint","source":"integration-test","requested_by":"operator","payload":{"waypoint_id":"wp-demo"}}'
+```
+
+预期返回：
+
+- `accepted = true`
+- `task_status.task_type = go_to_waypoint`
+- `current_goal = wp-demo`
 
 ## 使用方式
 
@@ -250,6 +316,16 @@ python3 -m nuc_state_uploader.main switch-mode --mode real
   - `mock` 或 `file`
 - `collector.state_file`
   - `file` 模式下读取的 JSON 文件
+- `collector.runtime_state_file`
+  - mission 服务和状态上送共享的运行态文件
+- `mission_server.host`
+  - mission 服务监听地址，默认 `0.0.0.0`
+- `mission_server.port`
+  - mission 服务监听端口，默认 `8090`
+- `mission_server.path`
+  - mission 服务路径，默认 `/api/internal/rk3588/mission`
+- `mission_server.runtime_state_file`
+  - mission 服务写入的运行态文件，通常应与 `collector.runtime_state_file` 保持一致
 
 ## 自测命令
 

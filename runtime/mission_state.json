@@ -1,28 +1,96 @@
 {
   "task": {
-    "id": "nuc-task-go-to-waypoint",
-    "type": "go_to_waypoint",
+    "id": "nuc-task-return-home",
+    "type": "return_home",
     "status": "running",
-    "progress_percent": 10,
+    "progress_percent": 15,
     "source": "nuc"
   },
   "navigation": {
     "mode": "auto",
     "status": "running",
-    "goal_id": "wp-round4-direct",
-    "remaining_distance_m": 5.0
+    "goal_id": "home",
+    "remaining_distance_m": 3.0
   },
   "alerts": [],
-  "updated_at": "2026-04-14T00:08:25Z",
+  "updated_at": "2026-04-14T00:31:35Z",
   "command_history": [
     {
       "command": "go_to_waypoint",
-      "source": "round4-direct-check",
+      "source": "round4-recheck",
       "requested_by": "codex",
       "payload": {
-        "waypoint_id": "wp-round4-direct"
+        "waypoint_id": "wp-round4-recheck"
       },
-      "received_at": "2026-04-14T00:08:25Z",
+      "received_at": "2026-04-14T00:30:41Z",
+      "accepted": true
+    },
+    {
+      "command": "pause_task",
+      "source": "round4-recheck",
+      "requested_by": "codex",
+      "payload": {},
+      "received_at": "2026-04-14T00:30:42Z",
+      "accepted": true
+    },
+    {
+      "command": "return_home",
+      "source": "round4-recheck",
+      "requested_by": "codex",
+      "payload": {},
+      "received_at": "2026-04-14T00:30:43Z",
+      "accepted": true
+    },
+    {
+      "command": "go_to_waypoint",
+      "source": "round4-recheck-seq",
+      "requested_by": "codex",
+      "payload": {
+        "waypoint_id": "wp-round4-seq2"
+      },
+      "received_at": "2026-04-14T00:31:06Z",
+      "accepted": true
+    },
+    {
+      "command": "pause_task",
+      "source": "round4-recheck-seq",
+      "requested_by": "codex",
+      "payload": {},
+      "received_at": "2026-04-14T00:31:06Z",
+      "accepted": true
+    },
+    {
+      "command": "return_home",
+      "source": "round4-recheck-seq",
+      "requested_by": "codex",
+      "payload": {},
+      "received_at": "2026-04-14T00:31:06Z",
+      "accepted": true
+    },
+    {
+      "command": "go_to_waypoint",
+      "source": "round4-recheck-seq2",
+      "requested_by": "codex",
+      "payload": {
+        "waypoint_id": "wp-round4-seq2"
+      },
+      "received_at": "2026-04-14T00:31:32Z",
+      "accepted": true
+    },
+    {
+      "command": "pause_task",
+      "source": "round4-recheck-seq2",
+      "requested_by": "codex",
+      "payload": {},
+      "received_at": "2026-04-14T00:31:33Z",
+      "accepted": true
+    },
+    {
+      "command": "return_home",
+      "source": "round4-recheck-seq2",
+      "requested_by": "codex",
+      "payload": {},
+      "received_at": "2026-04-14T00:31:35Z",
       "accepted": true
     }
   ]

@@ -3,10 +3,11 @@
 ## 验收时间
 
 - 本次 NUC 侧辅助验收时间：`2026-04-14`（Asia/Shanghai）
+- 补充复验时间：`2026-04-14`（Asia/Shanghai）
 
 ## 最终结论
 
-按 [NUC_DO3.md](/home/robomaster/QHXD_NUC/NUC_DO3.md#L1) 的 Round 4 最小指标，本轮 **暂不能判定整轮正式通过**。
+按 [NUC_DO3.md](/home/robomaster/QHXD_NUC/NUC_DO3.md#L1) 的 Round 4 最小指标，本轮 **现已可以判定整轮正式通过**。
 
 更准确地说：
 
@@ -15,13 +16,13 @@
 - NUC 停止上送后进入离线：**通过**
 - NUC 恢复上送后恢复在线：**通过**
 - NUC bridge 异常暴露：**通过**
-- `RK3588 public mission API -> NUC mission` 三条命令闭环：**失败**
+- `RK3588 public mission API -> NUC mission` 三条命令闭环：**通过**
 
 因此当前更准确的结论是：
 
 - **Round 4 的 real 状态流 / 断流 / 恢复链路已通过 NUC 侧实测**
-- **当前 `8000` 正式运行实例上的 mission bridge 仍未真正连到 NUC mission 服务**
-- **所以整轮 Round 4 还不能正式判定通过**
+- **在 RK3588 按正确 bridge 配置重新启动后，`8000` 正式运行实例上的 mission bridge 也已实测打通**
+- **因此整轮 Round 4 当前可正式判定通过**
 
 ## 本次测试环境
 
@@ -153,9 +154,20 @@ ws://192.168.10.2:8000/ws/state
 
 - **通过**
 
-### 4. 通过 RK3588 public mission API 验证命令闭环
+### 4. 首轮结果说明
 
-我在 NUC 侧对 RK3588 当前 `8000` 实例实际测试了：
+本轮最初一次验收时，`8000` 实例上的三条 public mission 命令确实返回过：
+
+- `accepted=false`
+- `detail="无法连接 NUC 命令接口：[Errno 111] Connection refused"`
+
+这一次失败与当时 RK3588 正式实例未带正确 NUC bridge 配置一致。
+
+在你确认已经使用正确的 RK3588 后端启动方式后，我又针对刚才未通过的项做了补充复验，结果见下。
+
+### 5. 复验：通过 RK3588 public mission API 验证命令闭环
+
+我在 NUC 侧对 RK3588 当前 `8000` 实例重新实际测试了：
 
 - `POST /api/mission/go_to_waypoint`
 - `POST /api/mission/pause`
@@ -163,8 +175,9 @@ ws://192.168.10.2:8000/ws/state
 
 三条命令返回结果关键字段均为：
 
-- `accepted=false`
-- `detail="无法连接 NUC 命令接口：[Errno 111] Connection refused"`
+- `accepted=true`
+- `task_status.source=nuc`
+- `detail` 为对应的 NUC 受理结果
 
 随后查询：
 
@@ -174,15 +187,50 @@ curl --noproxy '*' -sS http://192.168.10.2:8000/api/commands/logs
 
 新增日志项中可见：
 
-- `id=51 go_to_waypoint accepted=false`
-- `id=52 return_home accepted=false`
-- `id=53 pause accepted=false`
+- `id=55 go_to_waypoint accepted=true`
+- `id=56 pause accepted=true`
+- `id=57 return_home accepted=true`
 
 结论：
 
-- **失败**
+- **通过**
 
-### 5. 对照验证：NUC mission 服务本身正常
+### 6. 复验：命令后的状态变化已回流到 RK3588
+
+为避免“命令 accepted 但状态没更新”的误判，我又按顺序执行了：
+
+1. `POST /api/mission/go_to_waypoint`
+2. `GET /api/state/latest`
+3. `POST /api/mission/pause`
+4. `GET /api/state/latest`
+5. `POST /api/mission/return_home`
+6. `GET /api/state/latest`
+
+串行复验结果如下：
+
+- `go_to_waypoint` 后
+  - `task_type=go_to_waypoint`
+  - `task_state=running`
+  - `current_goal=wp-round4-seq2`
+  - `nav_state=running`
+- `pause` 后
+  - `task_type=go_to_waypoint`
+  - `task_state=paused`
+  - `current_goal=wp-round4-seq2`
+  - `nav_state=paused`
+- `return_home` 后
+  - `task_type=return_home`
+  - `task_state=running`
+  - `current_goal=home`
+  - `nav_state=running`
+
+结论：
+
+- **通过**
+
+这说明本轮之前未通过的“命令后真实状态变化回传”现在也已经打通。
+
+### 7. 对照验证：NUC mission 服务本身正常
 
 为了排除“NUC 服务没起”的可能，我直接在 NUC 上调用了本机有线地址：
 
@@ -209,7 +257,7 @@ curl --noproxy '*' -sS -X POST http://192.168.10.3:8090/api/internal/rk3588/miss
 - 当前失败点不在 NUC mission 服务
 - 失败点仍然是 RK3588 当前 `8000` 实例的 bridge 目标没有正确打到该服务
 
-### 6. 停止 NUC 状态上送后，RK3588 进入离线
+### 8. 停止 NUC 状态上送后，RK3588 进入离线
 
 我手工停止状态上送进程，并等待超过 `5s`。
 
@@ -232,7 +280,7 @@ curl --noproxy '*' -sS http://192.168.10.2:8000/api/alerts
 
 - **通过**
 
-### 7. 恢复 NUC 状态上送后，RK3588 恢复在线
+### 9. 恢复 NUC 状态上送后，RK3588 恢复在线
 
 我重新启动状态上送进程后再次抓取：
 
@@ -254,7 +302,7 @@ curl --noproxy '*' -sS http://192.168.10.2:8000/api/alerts
 
 - **通过**
 
-### 8. bridge 异常已被清晰暴露
+### 10. bridge 异常已被清晰暴露
 
 在第 4 步三条命令失败后，`/api/alerts` 中新增了 bridge 异常告警：
 
@@ -276,13 +324,13 @@ curl --noproxy '*' -sS http://192.168.10.2:8000/api/alerts
    - **后端状态链路通过**
    - 本轮在终端环境内以 `/api/state/latest`、`/api/alerts`、`WS /ws/state` 代替页面截图验证
 3. 至少 3 条命令后，NUC 能把任务状态变化回传给 RK3588
-   - **失败**
+   - **通过**
 4. NUC 停止状态上送后，RK3588 页面能显示离线/超时
    - **后端状态链路通过**
 5. NUC 恢复状态上送后，RK3588 页面能恢复在线并继续更新
    - **后端状态链路通过**
 
-因此本轮最小指标中，**第 3 条未满足**，所以整轮 Round 4 当前 **不能正式通过**。
+因此本轮最小指标已全部满足，所以整轮 Round 4 当前 **可以正式通过**。
 
 ## 当前最准确的问题定位
 
@@ -302,54 +350,31 @@ curl --noproxy '*' -sS http://192.168.10.2:8000/api/alerts
 - bridge 异常告警暴露
 - NUC mission 服务本身
 
-### 当前失败的部分
+### 当前已确认恢复正常的部分
 
-- RK3588 当前 `8000` 正式运行实例的 public mission bridge 到 NUC mission 服务的实际转发
-
-### 最可能的直接原因
-
-当前 `8000` 运行实例用于 bridge 的：
-
-- `NUC_BASE_URL`
-- `NUC_MISSION_PATH`
-- 或目标端口
-
-仍然没有正确指向：
-
-```text
-http://192.168.10.3:8090/api/internal/rk3588/mission
-```
-
-因为如果当前实例 bridge 目标正确，那么本轮 3 条 public mission 命令不应全部返回：
-
-```text
-无法连接 NUC 命令接口：[Errno 111] Connection refused
-```
+- RK3588 当前 `8000` 正式运行实例的 public mission bridge
+- `POST /api/mission/go_to_waypoint`
+- `POST /api/mission/pause`
+- `POST /api/mission/return_home`
+- 命令日志入库
+- 命令后的状态回流
 
 ## 建议同步给 RK3588 端的信息
 
 建议直接同步以下结论：
 
 ```text
-Round 4 中需要 NUC 配合的 real 状态流、断流、恢复、bridge 异常暴露已经完成实测：
+Round 4 中需要 NUC 配合的 real 状态流、断流、恢复、bridge 异常暴露、任务闭环已经完成实测：
 
 1. 切到 real 后，RK3588 能进入“等待 NUC 首包”
 2. NUC 上送启动后，/api/state/latest 与 /ws/state 可恢复为在线 real 状态
 3. 停止上送超过阈值后，RK3588 能标记 nuc-state-timeout 并显示离线
 4. 恢复上送后，RK3588 能自动恢复在线
-5. public mission API 失败时，/api/alerts 能暴露 bridge 异常
+5. public mission API 三条命令已返回 accepted=true
+6. 命令后的状态变化已通过 /api/state/latest 回流到 RK3588
 
-但当前 8000 实例上的三条 public mission 命令：
-- /api/mission/go_to_waypoint
-- /api/mission/pause
-- /api/mission/return_home
-仍全部返回 accepted=false，
-detail 为：
-无法连接 NUC 命令接口：[Errno 111] Connection refused
-
-而 NUC mission 服务本身
-http://192.168.10.3:8090/api/internal/rk3588/mission
-直打返回 accepted=true。
-
-所以当前阻塞仍是 RK3588 正式实例的 bridge 目标地址/端口未对齐，而不是 NUC mission 服务不可用。
+当前可以确认：
+- RK3588 正式实例已按正确 bridge 配置启动
+- NUC mission 服务可被当前 8000 实例正常访问
+- Round 4 所需 NUC 配合项已全部完成
 ```
