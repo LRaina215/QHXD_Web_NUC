@@ -88,6 +88,37 @@ class MockStateCollectorTest(unittest.TestCase):
             self.assertTrue(payload["device_status"]["online"])
             self.assertEqual(payload["env_sensor"]["status"], "offline")
 
+    def test_rtt_file_collector_normalizes_boundaries_and_empty_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            state_file = Path(tmp_dir) / "rtt_state.json"
+            state_file.write_text(
+                """
+                {
+                  "battery_percent": 150,
+                  "emergency_stop": "yes",
+                  "fault_code": "",
+                  "online": 0,
+                  "velocity_mps": "0.00",
+                  "temperature_c": null,
+                  "humidity_percent": null,
+                  "status": "offline"
+                }
+                """.strip(),
+                encoding="utf-8",
+            )
+
+            collector = build_rtt_collector(
+                RttCollectorConfig(type="file", state_file=str(state_file), source_name="rtt")
+            )
+            low_level_state = collector.collect(0)
+
+            self.assertEqual(low_level_state.battery_percent, 100)
+            self.assertTrue(low_level_state.emergency_stop)
+            self.assertIsNone(low_level_state.fault_code)
+            self.assertFalse(low_level_state.online)
+            self.assertEqual(low_level_state.velocity_mps, 0.0)
+            self.assertEqual(low_level_state.env_status, "offline")
+
 
 if __name__ == "__main__":
     unittest.main()
